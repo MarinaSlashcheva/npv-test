@@ -1,0 +1,45 @@
+name: Daily Article Scan
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC = 08:00 CEST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print only, do not post or save)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily scan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: python src/main.py
+
+      - name: Commit updated seen.json
+        if: ${{ github.event.inputs.dry_run != 'true' }}
+        run: |
+          git config user.name "NPV Bot"
+          git config user.email "action@github.com"
+          git add data/seen.json
+          git diff --cached --quiet || git commit -m "chore: update seen articles [skip ci]"
+          git push
